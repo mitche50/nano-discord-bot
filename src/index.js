@@ -88,6 +88,13 @@ client.on('message', async msg => {
     try {
         let isMod = msg.guild && msg.guild.available && msg.member &&
             msg.member.roles.some(r => config.modRoles.includes(r.name));
+        if (isMod) {
+            for (let user of msg.mentions.users.array()) {
+                if (!user || !user.id) continue;
+                await client.fetchUser(user.id);
+                await msg.guild.fetchMember(user);
+            }
+        }
         const parts = msg.content.split(' ');
         if (parts[0] === '!mute') {
             if (!isMod) {
@@ -354,3 +361,5 @@ process.on('unhandledRejection', err => {
     console.error('Unhandled promise rejection', err);
     process.exit(1);
 });
+
+client.on('error', console.error);
