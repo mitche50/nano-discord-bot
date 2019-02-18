@@ -308,14 +308,14 @@ client.on('guildMemberAdd', member => {
     }
 });
 
-client.on('guildMemberAdd', member => {
+client.on('guildMemberAdd', async member => {
     try {
         if (config.welcomeMessage && !member.user.bot) {
             let message = 'Welcome <@' + member.user.id + '> to ' + member.guild.name;
             if (config.welcomeMessage) {
                 message += ':\n' + config.welcomeMessage;
             }
-            member.user.send(message);
+            await member.user.send(message);
         }
     } catch (err) {
         console.error(err);
