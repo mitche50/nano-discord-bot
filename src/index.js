@@ -1,5 +1,6 @@
 const fs = require('fs');
 const promiseTimeout = require('promise-timeout').timeout;
+const sleep = require('sleep-promise');
 const Discord = require('discord.js');
 const client = new Discord.Client();
 
@@ -76,6 +77,23 @@ function modifyRole(role, users, addRole) {
     }));
 }
 
+async function removeRoleSafe(member, role) {
+    while (true) {
+        try {
+            await member.removeRole(role);
+            break;
+        } catch (err) {
+            if (!err.code || (err.code >= 10000 && err.code <= 10000)) {
+                // They're not in the server right now.
+                // When they rejoin they won't have the role.
+                break;
+            }
+            console.error(err);
+            await sleep(5000);
+        }
+    }
+}
+
 function findFirstNum(parts) {
     for (let part of parts) {
         if (!isNaN(part)) {
@@ -120,8 +138,8 @@ client.on('message', async msg => {
                 if (muted[permanentId] !== undefined) {
                     clearTimeout(muted[permanentId].timeout);
                 }
-                const timeout = setTimeout(() => {
-                    member.removeRole(sinbinRole);
+                const timeout = setTimeout(async () => {
+                    removeRoleSafe(role, sinbinRole);
                     delete muted[permanentId];
                     saveMuted();
                 }, duration);
@@ -294,7 +312,7 @@ client.on('guildMemberAdd', member => {
                 if (!sinbinRole) return;
                 member.addRole(sinbinRole);
                 mutedInfo.timeout = setTimeout(() => {
-                    member.removeRole(sinbinRole);
+                    removeRoleSafe(member, sinbinRole);
                     delete muted[permanentId];
                     saveMuted();
                 }, duration);
@@ -340,12 +358,12 @@ client.login(config.token).then(() => {
             const duration = mutedInfo.endsAt - Date.now();
             if (duration && duration >= 0) {
                 mutedInfo.timeout = setTimeout(() => {
-                    member.removeRole(sinbinRole);
+                    removeRoleSafe(member, sinbinRole);
                     delete muted[permanentId];
                     saveMuted();
                 }, duration);
             } else {
-                member.removeRole(sinbinRole);
+                removeRoleSafe(member, sinbinRole);
                 mutedToDelete.push(guildId + ' ' + userId);
             }
         }
