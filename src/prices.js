@@ -29,15 +29,15 @@ module.exports.exchanges.Binance = async function() {
 };
 
 module.exports.exchanges.KuCoin = async function() {
-    const res = await fetch('https://api.kucoin.com/v1/open/tick?symbol=NANO-BTC');
+    const res = await fetch('https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=NANO-BTC');
     if (res.status !== 200) {
         throw new Error('Kucoin returned status code ' + res.status + '\n' + await res.text());
     }
     const json = await res.json();
-    if (!json.success) {
+    if (json.code != 200000) { // Should be non-strict comparison (currently a string)
         throw new Error('Kucoin returned non-successful body: ' + JSON.stringify(json));
     }
-    return (+json.data.lastDealPrice).toFixed(8);
+    return (+json.data.price).toFixed(8);
 };
 
 module.exports.exchanges.Nanex = async function() {
