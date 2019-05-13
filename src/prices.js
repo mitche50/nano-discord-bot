@@ -39,12 +39,3 @@ module.exports.exchanges.KuCoin = async function() {
     }
     return (+json.data.price).toFixed(8);
 };
-
-module.exports.exchanges.Nanex = async function() {
-    const res = await fetch('https://nanex.co/api/public/ticker/btcnano');
-    if (res.status !== 200) {
-        throw new Error('Nanex returned status code ' + res.status + '\n' + await res.text());
-    }
-    const json = await res.json();
-    return (1 / json.last_trade).toFixed(8);
-};
