@@ -1,6 +1,7 @@
 const fs = require('fs');
 const promiseTimeout = require('promise-timeout').timeout;
 const sleep = require('sleep-promise');
+const fetch = require('node-fetch');
 const Discord = require('discord.js');
 const client = new Discord.Client();
 
@@ -102,6 +103,22 @@ function findFirstNum(parts) {
     }
 }
 
+async function messageLinkBlacklisted(message) {
+    const longLinkRegex = /reddit.com[\/\\]r[\/\\]cryptocurrency/i;
+    if (longLinkRegex.test(message)) {
+        return true;
+    }
+    const shortLinkRegex = /(reddit.com|redd.it)[\/\\]([a-z0-9]{6})/ig;
+    while ((shortLinkInfo = shortLinkRegex.exec(message)) !== null) {
+        const shortLink = 'https://www.reddit.com/' + shortLinkInfo[2];
+        let res = await fetch(shortLink, {redirect: 'manual'});
+        if (longLinkRegex.test(res.headers.get('location'))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 client.on('message', async msg => {
     try {
         let isMod = msg.guild && msg.guild.available && msg.member &&
@@ -111,6 +128,15 @@ client.on('message', async msg => {
                 if (!user || !user.id) continue;
                 await client.fetchUser(user.id);
                 await msg.guild.fetchMember(user);
+            }
+        }
+        if (msg.channel instanceof Discord.TextChannel) {
+            if (await messageLinkBlacklisted(msg.content)) {
+                await msg.delete();
+                await msg.reply('Sorry, but links to r/cc are blacklisted' +
+                    ' as per their vote manipulation policy.\nAttempts to bypass this' +
+                    ' do not look good on the community and will result in a mute.');
+                return;
             }
         }
         const parts = msg.content.split(' ');
