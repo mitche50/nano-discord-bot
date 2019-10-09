@@ -354,7 +354,7 @@ client.on('userUpdate', (oldUser, newUser) => {
     if (noticeablyChanged) {
         let copycatLevel = isCopycat(newUser.username, newUser.discriminator);
         if (copycatLevel > 0 && !copycatTargetIds.has(newUser.id)) {
-            let message = '^^ <@&' + config.copycatAlertRoleId + '> potential copycat';
+            let message = '^^ <@&' + config.copycatAlertRoleId + '> potential impersonator';
             if (copycatLevel > 1) {
                 message += '\nsince discriminator matches, may be a ban in the future';
             }
@@ -372,7 +372,7 @@ client.on('guildMemberUpdate', (oldMember, newMember) => {
 
         let copycatLevel = isCopycat(newNick, newMember.user.discriminator);
         if (copycatLevel > 0 && !copycatTargetIds.has(newMember.user.id)) {
-            let message = '^^ <@&' + config.copycatAlertRoleId + '> potential copycat';
+            let message = '^^ <@&' + config.copycatAlertRoleId + '> potential impersonator';
             if (copycatLevel > 1) {
                 message += '\nsince discriminator matches, may be a ban in the future';
             }
