@@ -2,6 +2,7 @@ const fs = require('fs');
 const promiseTimeout = require('promise-timeout').timeout;
 const sleep = require('sleep-promise');
 const fetch = require('node-fetch');
+const homoglyphSearch = require('homoglyph-search').search;
 const Discord = require('discord.js');
 const client = new Discord.Client();
 
@@ -310,10 +311,55 @@ if (config.priceChannelId) {
     }, config.priceInterval || 60000);
 }
 
+let copycatTargets = [];
+let copycatTargetDiscriminators = {};
+let copycatTargetIds = new Set();
+
+function isCopycat(name, discriminator) {
+    if (copycatTargets.length === 0 || !name) {
+        return false;
+    }
+    let lengthMatches = [];
+    let symbolCount = 0;
+    for (let char of name) {
+        symbolCount++;
+    }
+    for (let copycatTarget of copycatTargets) {
+        if (Math.abs(symbolCount - copycatTarget.length) <= 2) {
+            lengthMatches.push(copycatTarget);
+        }
+    }
+    let matchLevel = 0;
+    for (let match of homoglyphSearch(name, lengthMatches)) {
+        matchLevel = Math.max(matchLevel, 1);
+        if (discriminator && copycatTargetDiscriminators[match.word] === discriminator) {
+            matchLevel = Math.max(matchLevel, 2);
+        }
+    }
+    return matchLevel;
+}
+
 client.on('userUpdate', (oldUser, newUser) => {
+    let noticeablyChanged = false;
     if (oldUser.username !== newUser.username) {
         let message = '`' + oldUser.username + '` has changed their username to `' + newUser.username + '`: <@' + newUser.id + '>';
         client.channels.get(config.nameChangeChannelId).send(message);
+        noticeablyChanged = true;
+    }
+    if (oldUser.discriminator !== newUser.discriminator) {
+        let message = '`' + oldUser.username + '` has changed their discriminator from #' + oldUser.discriminator + ' to #' + newUser.discriminator + ': <@' + newUser.id + '>';
+        client.channels.get(config.nameChangeChannelId).send(message);
+        noticeablyChanged = true;
+    }
+    if (noticeablyChanged) {
+        let copycatLevel = isCopycat(newUser.username, newUser.discriminator);
+        if (copycatLevel > 0 && !copycatTargetIds.has(newUser.id)) {
+            let message = '^^ <@&' + config.copycatAlertRoleId + '> potential copycat';
+            if (copycatLevel > 1) {
+                message += '\nsince discriminator matches, may be a ban in the future';
+            }
+            client.channels.get(config.nameChangeChannelId).send(message);
+        }
     }
 });
 
@@ -323,6 +369,15 @@ client.on('guildMemberUpdate', (oldMember, newMember) => {
     if (oldNick != newNick) {
         let message = '`' + oldNick + '` has changed their nickname to `' + newNick + '`: <@' + newMember.user.id + '>';
         client.channels.get(config.nameChangeChannelId).send(message);
+
+        let copycatLevel = isCopycat(newNick, newMember.user.discriminator);
+        if (copycatLevel > 0 && !copycatTargetIds.has(newMember.user.id)) {
+            let message = '^^ <@&' + config.copycatAlertRoleId + '> potential copycat';
+            if (copycatLevel > 1) {
+                message += '\nsince discriminator matches, may be a ban in the future';
+            }
+            client.channels.get(config.nameChangeChannelId).send(message);
+        }
     }
 });
 
@@ -395,6 +450,19 @@ client.login(config.token).then(() => {
         }
         for (const key of mutedToDelete) {
             delete muted[key];
+        }
+        if (config.guildId && config.copycatTargetRoleId) {
+            const guild = client.guilds.get(config.guildId);
+            const copycatTargetRole = guild.roles.get(config.copycatTargetRoleId);
+            for (let [memberId, member] of copycatTargetRole.members) {
+                copycatTargetIds.add(member.user.id);
+                if (member.nickname) {
+                    copycatTargets.push(member.nickname);
+                    copycatTargetDiscriminators[member.nickname] = member.user.discriminator;
+                }
+                copycatTargets.push(member.user.username);
+                copycatTargetDiscriminators[member.user.username] = member.user.discriminator;
+            }
         }
     } catch (err) {
         console.error(err);
