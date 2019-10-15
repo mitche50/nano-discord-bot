@@ -315,10 +315,15 @@ let copycatTargets = [];
 let copycatTargetDiscriminators = {};
 let copycatTargetIds = new Set();
 
+function preprocessCopycatName(name) {
+    return name.replace(/\s/g, '');
+}
+
 function isCopycat(name, discriminator) {
     if (copycatTargets.length === 0 || !name) {
         return false;
     }
+    name = preprocessCopycatName(name);
     let lengthMatches = [];
     let symbolCount = 0;
     for (let char of name) {
@@ -339,6 +344,17 @@ function isCopycat(name, discriminator) {
     return matchLevel;
 }
 
+function checkForCopycat(user, name) {
+    let copycatLevel = isCopycat(name, user.discriminator);
+    if (copycatLevel > 0 && !copycatTargetIds.has(user.id)) {
+        let message = '^^ <@&' + config.copycatAlertRoleId + '> potential impersonator';
+        if (copycatLevel > 1) {
+            message += '\nsince discriminator matches, may be a ban in the future';
+        }
+        client.channels.get(config.nameChangeChannelId).send(message);
+    }
+}
+
 client.on('userUpdate', (oldUser, newUser) => {
     let noticeablyChanged = false;
     if (oldUser.username !== newUser.username) {
@@ -347,19 +363,12 @@ client.on('userUpdate', (oldUser, newUser) => {
         noticeablyChanged = true;
     }
     if (oldUser.discriminator !== newUser.discriminator) {
-        let message = '`' + oldUser.username + '` has changed their discriminator from #' + oldUser.discriminator + ' to #' + newUser.discriminator + ': <@' + newUser.id + '>';
+        let message = '`' + newUser.username + '` has changed their discriminator from #' + oldUser.discriminator + ' to #' + newUser.discriminator + ': <@' + newUser.id + '>';
         client.channels.get(config.nameChangeChannelId).send(message);
         noticeablyChanged = true;
     }
     if (noticeablyChanged) {
-        let copycatLevel = isCopycat(newUser.username, newUser.discriminator);
-        if (copycatLevel > 0 && !copycatTargetIds.has(newUser.id)) {
-            let message = '^^ <@&' + config.copycatAlertRoleId + '> potential impersonator';
-            if (copycatLevel > 1) {
-                message += '\nsince discriminator matches, may be a ban in the future';
-            }
-            client.channels.get(config.nameChangeChannelId).send(message);
-        }
+        checkForCopycat(newUser, newUser.username);
     }
 });
 
@@ -369,19 +378,20 @@ client.on('guildMemberUpdate', (oldMember, newMember) => {
     if (oldNick != newNick) {
         let message = '`' + oldNick + '` has changed their nickname to `' + newNick + '`: <@' + newMember.user.id + '>';
         client.channels.get(config.nameChangeChannelId).send(message);
-
-        let copycatLevel = isCopycat(newNick, newMember.user.discriminator);
-        if (copycatLevel > 0 && !copycatTargetIds.has(newMember.user.id)) {
-            let message = '^^ <@&' + config.copycatAlertRoleId + '> potential impersonator';
-            if (copycatLevel > 1) {
-                message += '\nsince discriminator matches, may be a ban in the future';
-            }
-            client.channels.get(config.nameChangeChannelId).send(message);
-        }
+        checkForCopycat(newMember.user, newNick);
     }
 });
 
 client.on('guildMemberAdd', member => {
+    try {
+        checkForCopycat(member.user, member.user.username);
+        // Is this possible? It can't hurt.
+        if (member.nickname) {
+            checkForCopycat(member.user, member.nickname);
+        }
+    } catch (err) {
+        console.error(err);
+    }
     try {
         let permanentId = member.guild.id + ' ' + member.user.id;
         if (muted[permanentId] !== undefined) {
@@ -456,12 +466,12 @@ client.login(config.token).then(() => {
             const copycatTargetRole = guild.roles.get(config.copycatTargetRoleId);
             for (let [memberId, member] of copycatTargetRole.members) {
                 copycatTargetIds.add(member.user.id);
-                if (member.nickname) {
-                    copycatTargets.push(member.nickname);
-                    copycatTargetDiscriminators[member.nickname] = member.user.discriminator;
+                for (let name of [member.user.username, member.nickname]) {
+                    if (!name) continue;
+                    name = preprocessCopycatName(name);
+                    copycatTargets.push(name);
+                    copycatTargetDiscriminators[name] = member.user.discriminator;
                 }
-                copycatTargets.push(member.user.username);
-                copycatTargetDiscriminators[member.user.username] = member.user.discriminator;
             }
         }
     } catch (err) {
