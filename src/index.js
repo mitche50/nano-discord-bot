@@ -314,6 +314,7 @@ if (config.priceChannelId) {
 let copycatTargets = [];
 let copycatTargetDiscriminators = {};
 let copycatTargetIds = new Set();
+let copycatWords = [];
 
 function preprocessCopycatName(name) {
     return name.replace(/\s/g, '');
@@ -324,7 +325,7 @@ function isCopycat(name, discriminator) {
         return false;
     }
     name = preprocessCopycatName(name);
-    let lengthMatches = [];
+    let lengthMatches = copycatWords.slice();
     let symbolCount = 0;
     for (let char of name) {
         symbolCount++;
@@ -475,6 +476,9 @@ client.login(config.token).then(() => {
                         copycatTargetDiscriminators[name] = member.user.discriminator;
                     }
                 }
+            }
+            if (config.copycatWords) {
+                copycatWords = config.copycatWords;
             }
         }
     } catch (err) {
