@@ -166,7 +166,7 @@ client.on('message', async msg => {
                     clearTimeout(muted[permanentId].timeout);
                 }
                 const timeout = setTimeout(async () => {
-                    removeRoleSafe(role, sinbinRole);
+                    removeRoleSafe(member, sinbinRole);
                     delete muted[permanentId];
                     saveMuted();
                 }, duration);
