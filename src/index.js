@@ -461,16 +461,19 @@ client.login(config.token).then(() => {
         for (const key of mutedToDelete) {
             delete muted[key];
         }
-        if (config.guildId && config.copycatTargetRoleId) {
+        if (config.guildId && (config.copycatTargetRoleIds || config.copycatTargetRoleId)) {
             const guild = client.guilds.get(config.guildId);
-            const copycatTargetRole = guild.roles.get(config.copycatTargetRoleId);
-            for (let [memberId, member] of copycatTargetRole.members) {
-                copycatTargetIds.add(member.user.id);
-                for (let name of [member.user.username, member.nickname]) {
-                    if (!name) continue;
-                    name = preprocessCopycatName(name);
-                    copycatTargets.push(name);
-                    copycatTargetDiscriminators[name] = member.user.discriminator;
+            const roles = config.copycatTargetRoleIds || [config.copycatTargetRoleId];
+            for (let roleId of roles) {
+                const role = guild.roles.get(roleId);
+                for (let [memberId, member] of role.members) {
+                    copycatTargetIds.add(member.user.id);
+                    for (let name of [member.user.username, member.nickname]) {
+                        if (!name) continue;
+                        name = preprocessCopycatName(name);
+                        copycatTargets.push(name);
+                        copycatTargetDiscriminators[name] = member.user.discriminator;
+                    }
                 }
             }
         }
