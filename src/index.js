@@ -464,6 +464,15 @@ client.login(config.token).then(() => {
         }
         if (config.guildId && (config.copycatTargetRoleIds || config.copycatTargetRoleId)) {
             const guild = client.guilds.get(config.guildId);
+            if (config.copycatTargetsMisc) {
+                if (typeof config.copycatTargetsMisc === 'object' && !Array.isArray(config.copycatTargetsMisc)) {
+                    copycatTargetDiscriminators = config.copycatTargetsMisc;
+                    copycatTargets = Object.keys(config.copycatTargetsMisc).map(preprocessCopycatName);
+                } else {
+                    console.error("Ignoring config.copycatTargetsMisc: expected a map of username to discriminator");
+                    console.error("you could try copycatWords instead if you're trying to target a term instead of a user");
+                }
+            }
             const roles = config.copycatTargetRoleIds || [config.copycatTargetRoleId];
             for (let roleId of roles) {
                 const role = guild.roles.get(roleId);
