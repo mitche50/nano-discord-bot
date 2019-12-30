@@ -361,7 +361,7 @@ async function checkForCopycat(user, name) {
         try {
             await globalGuild.ban(user);
         } catch (err) {
-            console.error("Failed to ban impersonator, does the bot have banning permissions?", err);
+            console.error('Failed to ban impersonator, does the bot have banning permissions?', err);
         }
     }
 }
@@ -484,12 +484,20 @@ client.login(config.token).then(() => {
             const guild = client.guilds.get(config.guildId);
             globalGuild = guild;
             if (config.copycatTargetsMisc) {
-                if (typeof config.copycatTargetsMisc === 'object' && !Array.isArray(config.copycatTargetsMisc)) {
-                    copycatTargetDiscriminators = config.copycatTargetsMisc;
-                    copycatTargets = Object.keys(config.copycatTargetsMisc).map(preprocessCopycatName);
+                if (typeof config.copycatTargetsMisc !== 'object' || Array.isArray(config.copycatTargetsMisc)) {
+                    for (let [key, id] of config.copycatTargetsMisc) {
+                        const parts = key.split('#');
+                        if (parts.length !== 2 || isNaN(parts[1]) || parseInt(parts[1]) > 9999 || parseInt(parts[1]) <= 0) {
+                            console.error('Expected config.copycatTargetsMisc key to be something like "ExampleUser#1234"; ignoring');
+                        }
+                        const [name, discriminator] = parts;
+                        copycatTargetIds.add(id);
+                        copycatTargets.push(name);
+                        copycatTargetDiscriminators[name] = ('' + discriminator).padStart(4, '0');
+                    }
                 } else {
-                    console.error("Ignoring config.copycatTargetsMisc: expected a map of username to discriminator");
-                    console.error("you could try copycatWords instead if you're trying to target a term instead of a user");
+                    console.error('Ignoring config.copycatTargetsMisc: expected a map of "ExampleUser#1234" to (long) ID');
+                    console.error('you could try copycatWords instead if you\'re trying to target a term instead of a user');
                 }
             }
             const roles = config.copycatTargetRoleIds || [config.copycatTargetRoleId];
