@@ -315,6 +315,7 @@ let copycatTargets = [];
 let copycatTargetDiscriminators = {};
 let copycatTargetIds = new Set();
 let copycatWords = [];
+let globalGuild;
 
 function preprocessCopycatName(name) {
     return name.replace(/\s/g, '');
@@ -345,50 +346,67 @@ function isCopycat(name, discriminator) {
     return matchLevel;
 }
 
-function checkForCopycat(user, name) {
+async function checkForCopycat(user, name) {
+    if (copycatTargetIds.has(user.id)) return;
+
     let copycatLevel = isCopycat(name, user.discriminator);
-    if (copycatLevel > 0 && !copycatTargetIds.has(user.id)) {
+    if (copycatLevel > 0) {
         let message = '^^ <@&' + config.copycatAlertRoleId + '> potential impersonator';
         if (copycatLevel > 1) {
-            message += '\nsince discriminator matches, may be a ban in the future';
+            message += '\nsince discriminator matches, banning';
         }
-        client.channels.get(config.nameChangeChannelId).send(message);
+        await client.channels.get(config.nameChangeChannelId).send(message);
+    }
+    if (copycatLevel > 1) {
+        try {
+            await globalGuild.ban(user);
+        } catch (err) {
+            console.error("Failed to ban impersonator, does the bot have banning permissions?", err);
+        }
     }
 }
 
-client.on('userUpdate', (oldUser, newUser) => {
-    let noticeablyChanged = false;
-    if (oldUser.username !== newUser.username) {
-        let message = '`' + oldUser.username + '` has changed their username to `' + newUser.username + '`: <@' + newUser.id + '>';
-        client.channels.get(config.nameChangeChannelId).send(message);
-        noticeablyChanged = true;
-    }
-    if (oldUser.discriminator !== newUser.discriminator) {
-        let message = '`' + newUser.username + '` has changed their discriminator from #' + oldUser.discriminator + ' to #' + newUser.discriminator + ': <@' + newUser.id + '>';
-        client.channels.get(config.nameChangeChannelId).send(message);
-        noticeablyChanged = true;
-    }
-    if (noticeablyChanged) {
-        checkForCopycat(newUser, newUser.username);
-    }
-});
-
-client.on('guildMemberUpdate', (oldMember, newMember) => {
-    let oldNick = oldMember.nickname || oldMember.user.username;
-    let newNick = newMember.nickname || newMember.user.username;
-    if (oldNick != newNick) {
-        let message = '`' + oldNick + '` has changed their nickname to `' + newNick + '`: <@' + newMember.user.id + '>';
-        client.channels.get(config.nameChangeChannelId).send(message);
-        checkForCopycat(newMember.user, newNick);
-    }
-});
-
-client.on('guildMemberAdd', member => {
+client.on('userUpdate', async (oldUser, newUser) => {
     try {
-        checkForCopycat(member.user, member.user.username);
+        let noticeablyChanged = false;
+        if (oldUser.username !== newUser.username) {
+            let message = '`' + oldUser.username + '` has changed their username to `' + newUser.username + '`: <@' + newUser.id + '>';
+            await client.channels.get(config.nameChangeChannelId).send(message);
+            noticeablyChanged = true;
+        }
+        if (oldUser.discriminator !== newUser.discriminator) {
+            let message = '`' + newUser.username + '` has changed their discriminator from #' + oldUser.discriminator + ' to #' + newUser.discriminator + ': <@' + newUser.id + '>';
+            await client.channels.get(config.nameChangeChannelId).send(message);
+            noticeablyChanged = true;
+        }
+        if (noticeablyChanged) {
+            await checkForCopycat(newUser, newUser.username);
+        }
+    } catch (err) {
+        console.error(err);
+    }
+});
+
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+    try {
+        let oldNick = oldMember.nickname || oldMember.user.username;
+        let newNick = newMember.nickname || newMember.user.username;
+        if (oldNick != newNick) {
+            let message = '`' + oldNick + '` has changed their nickname to `' + newNick + '`: <@' + newMember.user.id + '>';
+            await client.channels.get(config.nameChangeChannelId).send(message);
+            await checkForCopycat(newMember.user, newNick);
+        }
+    } catch (err) {
+        console.error(err);
+    }
+});
+
+client.on('guildMemberAdd', async member => {
+    try {
+        await checkForCopycat(member.user, member.user.username);
         // Is this possible? It can't hurt.
         if (member.nickname) {
-            checkForCopycat(member.user, member.nickname);
+            await checkForCopycat(member.user, member.nickname);
         }
     } catch (err) {
         console.error(err);
@@ -464,6 +482,7 @@ client.login(config.token).then(() => {
         }
         if (config.guildId && (config.copycatTargetRoleIds || config.copycatTargetRoleId)) {
             const guild = client.guilds.get(config.guildId);
+            globalGuild = guild;
             if (config.copycatTargetsMisc) {
                 if (typeof config.copycatTargetsMisc === 'object' && !Array.isArray(config.copycatTargetsMisc)) {
                     copycatTargetDiscriminators = config.copycatTargetsMisc;
