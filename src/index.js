@@ -10,6 +10,9 @@ const prices = require('./prices.js');
 
 const config = require('../config.json');
 
+console.error('-- starting up at ' + new Date());
+console.log('-- starting up at ' + new Date());
+
 let muted = {};
 
 try {
@@ -130,6 +133,9 @@ client.on('message', async msg => {
                 await client.fetchUser(user.id);
                 await msg.guild.fetchMember(user);
             }
+        }
+        if (msg.content.trim().startsWith('!')) {
+            console.log('<@' + msg.author.id + '>: ' + msg.content);
         }
         if (msg.channel instanceof Discord.TextChannel) {
             if (await messageLinkBlacklisted(msg.content)) {
@@ -383,7 +389,7 @@ client.on('guildMemberUpdate', (oldMember, newMember) => {
     }
 });
 
-client.on('guildMemberAdd', member => {
+client.on('guildMemberAdd', async member => {
     try {
         checkForCopycat(member.user, member.user.username);
         // Is this possible? It can't hurt.
@@ -395,14 +401,22 @@ client.on('guildMemberAdd', member => {
     }
     try {
         let permanentId = member.guild.id + ' ' + member.user.id;
+        console.log(new Date() + ' User `' + member.user.username + '` joined: ' + permanentId);
         if (muted[permanentId] !== undefined) {
             const mutedInfo = muted[permanentId];
             clearTimeout(mutedInfo.timeout);
             const duration = mutedInfo.endsAt - Date.now();
             if (duration && duration >= 0) {
+                console.log('User has an unexpired mute, applying..');
                 const sinbinRole = member.guild.roles.find('name', config.sinbinRole);
                 if (!sinbinRole) return;
-                member.addRole(sinbinRole);
+                try {
+                    await member.addRole(sinbinRole);
+                } catch (err) {
+                    console.error(err);
+                    setTimeout(() => member.addRole(sinbinRole).catch(console.error), 1000);
+                    setTimeout(() => member.addRole(sinbinRole).catch(console.error), 5000);
+                }
                 mutedInfo.timeout = setTimeout(() => {
                     removeRoleSafe(member, sinbinRole);
                     delete muted[permanentId];
@@ -416,9 +430,7 @@ client.on('guildMemberAdd', member => {
     } catch (err) {
         console.error(err);
     }
-});
 
-client.on('guildMemberAdd', async member => {
     try {
         if (config.welcomeMessage && !member.user.bot) {
             let message = 'Welcome <@' + member.user.id + '> to ' + member.guild.name;
