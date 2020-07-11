@@ -123,6 +123,8 @@ async function messageLinkBlacklisted(message) {
     return false;
 }
 
+const unauthorizedPingers = {};
+
 client.on('message', async msg => {
     try {
         let isMod = msg.guild && msg.guild.available && msg.member &&
@@ -144,6 +146,30 @@ client.on('message', async msg => {
                     ' as per their vote manipulation policy.\nAttempts to bypass this' +
                     ' do not look good on the community and will result in a mute.');
                 return;
+            }
+            if (
+                !isMod &&
+                !msg.author.bot &&
+                msg.member &&
+                msg.member.roles.some(r => config.noPingingRoles.includes(r.name)) &&
+                msg.mentions.users.array().length
+            ) {
+                await msg.delete();
+                const authorId = msg.author.id;
+                const now = Date.now();
+                const timeout = 5*60*1000;
+                if (now - (unauthorizedPingers[authorId] || 0) < timeout) {
+                    await msg.member.kick();
+                    await msg.channel.send('<@' + msg.author.id + '> has been kicked for pinging while muted.');
+                } else {
+                    await msg.reply('No pinging when you\'re muted! Doing it again will get you kicked.');
+                }
+                unauthorizedPingers[authorId] = now;
+                setTimeout(() => {
+                    if (unauthorizedPingers[authorId] === now) {
+                        delete unauthorizedPingers[authorId];
+                    }
+                }, timeout);
             }
         }
         const parts = msg.content.split(' ');
