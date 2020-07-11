@@ -134,7 +134,7 @@ client.on('message', async msg => {
                 await msg.guild.fetchMember(user);
             }
         }
-        if (msg.content.trim().startsWith('!')) {
+        if (msg.content.trim().startsWith('!') || (msg.mentions && msg.mentions.users && msg.mentions.users.array().length)) {
             console.log('<@' + msg.author.id + '>: ' + msg.content);
         }
         if (msg.channel instanceof Discord.TextChannel) {
@@ -285,8 +285,8 @@ client.on('message', async msg => {
 
 if (config.priceChannelId) {
     setInterval(async () => {
-        const [cmc, ...exchanges] = await Promise.all([
-            await prices.cmc(),
+        const [coinGecko, ...exchanges] = await Promise.all([
+            await prices.coinGecko(),
             ...Object.keys(prices.exchanges).map(x =>
                 promiseTimeout(prices.exchanges[x](), config.exchangeApiTimeout || 2500)
                     .catch(err => console.log('Exchange API error: ' + err))
@@ -294,12 +294,12 @@ if (config.priceChannelId) {
             )
         ]);
         const embed = {};
-        embed.description = `**${cmc.btc} BTC - $${cmc.usd} USD**\n` +
-            `Market cap: $${cmc.market_cap} USD (#${cmc.cap_rank})\n` +
-            `24h volume: $${cmc.volume} USD\n1 BTC = $${cmc.btcusd} USD`;
-        if (cmc.percent_change_1h < 0) {
+        embed.description = `**${coinGecko.btc} BTC - $${coinGecko.usd} USD**\n` +
+            `Market cap: $${coinGecko.market_cap} USD (#${coinGecko.cap_rank})\n` +
+            `24h volume: $${coinGecko.volume} USD\n1 BTC = $${coinGecko.btcusd} USD`;
+        if (coinGecko.percent_change_1h < 0) {
             embed.color = 0xed2939; // imperial red
-        } else if (cmc.percent_change_1h > 0) {
+        } else if (coinGecko.percent_change_1h > 0) {
             embed.color = 0x39ff14; // neon green
         }
         embed.description += '\n```\n';
@@ -313,6 +313,10 @@ if (config.priceChannelId) {
             }
         }
         embed.description += '```';
+        embed.footer = {
+            "text": "Pulled from CoinGecko and the listed exchanges"
+        };
+        embed.timestamp = (new Date()).toISOString();
         await client.channels.get(config.priceChannelId).send(new Discord.RichEmbed(embed));
     }, config.priceInterval || 60000);
 }
