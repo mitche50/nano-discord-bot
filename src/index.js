@@ -59,15 +59,15 @@ function modifyRole(role, users, addRole) {
             if (member.user.bot) {
                 return;
             }
-            if (member.roles.some(r => config.modRoles.includes(r.name))) {
+            if (member.roles.cache.some(r => config.modRoles.includes(r.name))) {
                 continue;
             }
         }
         let promise;
         if (addRole) {
-            promise = member.addRole(role);
+            promise = member.roles.add(role);
         } else {
-            promise = member.removeRole(role);
+            promise = member.roles.remove(role);
         }
         promises.push(promise
             .then(() => [member, false])
@@ -85,7 +85,7 @@ function modifyRole(role, users, addRole) {
 async function removeRoleSafe(member, role) {
     while (true) {
         try {
-            await member.removeRole(role);
+            await member.roles.remove(role);
             break;
         } catch (err) {
             if (!err.code || (err.code >= 10000 && err.code <= 10000)) {
@@ -128,12 +128,12 @@ const unauthorizedPingers = {};
 client.on('message', async msg => {
     try {
         let isMod = msg.guild && msg.guild.available && msg.member &&
-            msg.member.roles.some(r => config.modRoles.includes(r.name));
+            msg.member.roles.cache.some(r => config.modRoles.includes(r.name));
         if (isMod) {
             for (let user of msg.mentions.users.array()) {
                 if (!user || !user.id) continue;
-                await client.fetchUser(user.id);
-                await msg.guild.fetchMember(user);
+                await client.users.fetch(user.id);
+                await msg.guild.members.fetch(user);
             }
         }
         if (msg.content.trim().startsWith('!') || (msg.mentions && msg.mentions.users && msg.mentions.users.array().length)) {
@@ -151,7 +151,7 @@ client.on('message', async msg => {
                 !isMod &&
                 !msg.author.bot &&
                 msg.member &&
-                msg.member.roles.some(r => config.noPingingRoles.includes(r.name)) &&
+                msg.member.roles.cache.some(r => config.noPingingRoles.includes(r.name)) &&
                 msg.mentions.users.array().length
             ) {
                 await msg.delete();
@@ -182,7 +182,7 @@ client.on('message', async msg => {
             if (!duration) {
                 return;
             }
-            const sinbinRole = msg.guild.roles.find('name', config.sinbinRole);
+            const sinbinRole = msg.guild.roles.cache.find(r => r.name === config.sinbinRole);
             if (!sinbinRole) return;
             if (!duration || duration <= 0) return;
             duration = duration * 60 * 1000;
@@ -229,7 +229,7 @@ client.on('message', async msg => {
             if (!isMod) {
                 return;
             }
-            const sinbinRole = msg.guild.roles.find('name', config.sinbinRole);
+            const sinbinRole = msg.guild.roles.cache.find(r => r.name === config.sinbinRole);
             if (!sinbinRole) return;
             if (!msg.mentions.members) return;
             const {successful, errored} = await modifyRole(sinbinRole, msg.mentions.members.array(), false);
@@ -261,7 +261,7 @@ client.on('message', async msg => {
             if (!isMod) {
                 return;
             }
-            const role = msg.guild.roles.find('name', parts.slice(1).join(' '));
+            const role = msg.guild.roles.cache.find(r => r.name === parts.slice(1).join(' '));
             if (role) {
                 msg.reply('role id: ' + role.id);
             } else {
@@ -285,7 +285,7 @@ client.on('message', async msg => {
             const modConfiguredRoles = config.modConfiguredRoles || {};
             if (!modConfiguredRoles.hasOwnProperty(roleName)) return;
             const roleConf = modConfiguredRoles[roleName];
-            const role = msg.guild.roles.get(roleConf.id);
+            const role = msg.guild.roles.cache.get(roleConf.id);
             if (!role || !msg.mentions.members) return;
             const {successful, errored} = await modifyRole(role, msg.mentions.members.array(), !!(newRoleValue ^ (!!roleConf.inverted)));
             if (!successful.length && !errored.length) {
@@ -308,44 +308,6 @@ client.on('message', async msg => {
         console.error(err);
     }
 });
-
-if (config.priceChannelId) {
-    setInterval(async () => {
-        const [coinGecko, ...exchanges] = await Promise.all([
-            await prices.coinGecko(),
-            ...Object.keys(prices.exchanges).map(x =>
-                promiseTimeout(prices.exchanges[x](), config.exchangeApiTimeout || 2500)
-                    .catch(err => console.log('Exchange API error: ' + err))
-                    .then(price => [x, price])
-            )
-        ]);
-        const embed = {};
-        embed.description = `**${coinGecko.btc} BTC - $${coinGecko.usd} USD**\n` +
-            `Market cap: $${coinGecko.market_cap} USD (#${coinGecko.cap_rank})\n` +
-            `24h volume: $${coinGecko.volume} USD\n1 BTC = $${coinGecko.btcusd} USD`;
-        if (coinGecko.percent_change_1h < 0) {
-            embed.color = 0xed2939; // imperial red
-        } else if (coinGecko.percent_change_1h > 0) {
-            embed.color = 0x39ff14; // neon green
-        }
-        embed.description += '\n```\n';
-        const nameFieldLength = Math.max(...exchanges.map(x => x[0].length)) + 1;
-        for (let [name, price] of exchanges) {
-            const nameSpacing = ' '.repeat(nameFieldLength - name.length);
-            if (price) {
-                embed.description += `${name}:${nameSpacing}${price} BTC\n`;
-            } else {
-                embed.description += `${name}:${nameSpacing}API error\n`;
-            }
-        }
-        embed.description += '```';
-        embed.footer = {
-            "text": "Pulled from CoinGecko and the listed exchanges"
-        };
-        embed.timestamp = (new Date()).toISOString();
-        await client.channels.get(config.priceChannelId).send(new Discord.RichEmbed(embed));
-    }, config.priceInterval || 60000);
-}
 
 let copycatTargets = [];
 let copycatTargetDiscriminators = {};
@@ -388,7 +350,7 @@ function checkForCopycat(user, name) {
         if (copycatLevel > 1) {
             message += '\nsince discriminator matches, may be a ban in the future';
         }
-        client.channels.get(config.nameChangeChannelId).send(message);
+        client.channels.cache.get(config.nameChangeChannelId).send(message);
     }
 }
 
@@ -396,12 +358,12 @@ client.on('userUpdate', (oldUser, newUser) => {
     let noticeablyChanged = false;
     if (oldUser.username !== newUser.username) {
         let message = '`' + oldUser.username + '` has changed their username to `' + newUser.username + '`: <@' + newUser.id + '>';
-        client.channels.get(config.nameChangeChannelId).send(message);
+        client.channels.cache.get(config.nameChangeChannelId).send(message);
         noticeablyChanged = true;
     }
     if (oldUser.discriminator !== newUser.discriminator) {
         let message = '`' + newUser.username + '` has changed their discriminator from #' + oldUser.discriminator + ' to #' + newUser.discriminator + ': <@' + newUser.id + '>';
-        client.channels.get(config.nameChangeChannelId).send(message);
+        client.channels.cache.get(config.nameChangeChannelId).send(message);
         noticeablyChanged = true;
     }
     if (noticeablyChanged) {
@@ -414,7 +376,7 @@ client.on('guildMemberUpdate', (oldMember, newMember) => {
     let newNick = newMember.nickname || newMember.user.username;
     if (oldNick != newNick) {
         let message = '`' + oldNick + '` has changed their nickname to `' + newNick + '`: <@' + newMember.user.id + '>';
-        client.channels.get(config.nameChangeChannelId).send(message);
+        client.channels.cache.get(config.nameChangeChannelId).send(message);
         checkForCopycat(newMember.user, newNick);
     }
 });
@@ -438,14 +400,14 @@ client.on('guildMemberAdd', async member => {
             const duration = mutedInfo.endsAt - Date.now();
             if (duration && duration >= 0) {
                 console.log('User has an unexpired mute, applying..');
-                const sinbinRole = member.guild.roles.find('name', config.sinbinRole);
+                const sinbinRole = member.guild.roles.cache.find(r => r.name === config.sinbinRole);
                 if (!sinbinRole) return;
                 try {
-                    await member.addRole(sinbinRole);
+                    await member.roles.add(sinbinRole);
                 } catch (err) {
                     console.error(err);
-                    setTimeout(() => member.addRole(sinbinRole).catch(console.error), 1000);
-                    setTimeout(() => member.addRole(sinbinRole).catch(console.error), 5000);
+                    setTimeout(() => member.roles.add(sinbinRole).catch(console.error), 1000);
+                    setTimeout(() => member.roles.add(sinbinRole).catch(console.error), 5000);
                 }
                 mutedInfo.timeout = setTimeout(() => {
                     removeRoleSafe(member, sinbinRole);
@@ -478,16 +440,22 @@ if (config.welcomeMessageFile) {
     config.welcomeMessage = fs.readFileSync(config.welcomeMessageFile);
 }
 
-client.login(config.token).then(() => {
+client.login(config.token).then(async () => {
     try {
+        // fetch all roles and put them in the cache
+        await client.guilds.resolve(config.guildId).roles.fetch();
+        if (config.nameChangeChannelId) {
+            await client.channels.fetch(config.nameChangeChannelId)
+                .catch(e => console.error("Failed to resolve name change channel:", e));
+        }
         const mutedToDelete = [];
         for (const [permanentId, mutedInfo] of Object.entries(muted)) {
             const [guildId, userId] = permanentId.split(' ');
-            const guild = client.guilds.get(guildId);
+            const guild = client.guilds.resolve(guildId);
             if (!guild || !guild.available) continue;
-            const sinbinRole = guild.roles.find('name', config.sinbinRole);
+            const sinbinRole = guild.roles.cache.find(r => r.name === config.sinbinRole);
             if (!sinbinRole) continue;
-            const member = guild.members.get(userId);
+            const member = await guild.members.fetch(userId).catch(console.error);
             if (!member) continue;
             const duration = mutedInfo.endsAt - Date.now();
             if (duration && duration >= 0) {
@@ -505,10 +473,14 @@ client.login(config.token).then(() => {
             delete muted[key];
         }
         if (config.guildId && (config.copycatTargetRoleIds || config.copycatTargetRoleId)) {
-            const guild = client.guilds.get(config.guildId);
+            const guild = client.guilds.resolve(config.guildId);
             const roles = config.copycatTargetRoleIds || [config.copycatTargetRoleId];
             for (let roleId of roles) {
-                const role = guild.roles.get(roleId);
+                const role = guild.roles.cache.get(roleId);
+                if (!role) {
+                    console.error("Failed to resolve copycat role " + roleId);
+                    continue;
+                }
                 for (let [memberId, member] of role.members) {
                     copycatTargetIds.add(member.user.id);
                     for (let name of [member.user.username, member.nickname]) {
@@ -526,11 +498,45 @@ client.login(config.token).then(() => {
     } catch (err) {
         console.error(err);
     }
-});
-
-process.on('unhandledRejection', err => {
-    console.error('Unhandled promise rejection', err);
-    process.exit(1);
+    const priceCheckChannel = config.priceChannelId &&
+        await client.channels.fetch(config.priceChannelId).catch(console.error);
+    if (priceCheckChannel) {
+        setInterval(async () => {
+            const [coinGecko, ...exchanges] = await Promise.all([
+                await prices.coinGecko(),
+                ...Object.keys(prices.exchanges).map(x =>
+                    promiseTimeout(prices.exchanges[x](), config.exchangeApiTimeout || 2500)
+                        .catch(err => console.log('Exchange API error: ' + err))
+                        .then(price => [x, price])
+                )
+            ]);
+            const embed = {};
+            embed.description = `**${coinGecko.btc} BTC - $${coinGecko.usd} USD**\n` +
+                `Market cap: $${coinGecko.market_cap} USD (#${coinGecko.cap_rank})\n` +
+                `24h volume: $${coinGecko.volume} USD\n1 BTC = $${coinGecko.btcusd} USD`;
+            if (coinGecko.percent_change_1h < 0) {
+                embed.color = 0xed2939; // imperial red
+            } else if (coinGecko.percent_change_1h > 0) {
+                embed.color = 0x39ff14; // neon green
+            }
+            embed.description += '\n```\n';
+            const nameFieldLength = Math.max(...exchanges.map(x => x[0].length)) + 1;
+            for (let [name, price] of exchanges) {
+                const nameSpacing = ' '.repeat(nameFieldLength - name.length);
+                if (price) {
+                    embed.description += `${name}:${nameSpacing}${price} BTC\n`;
+                } else {
+                    embed.description += `${name}:${nameSpacing}API error\n`;
+                }
+            }
+            embed.description += '```';
+            embed.footer = {
+                "text": "Pulled from CoinGecko and the listed exchanges"
+            };
+            embed.timestamp = (new Date()).toISOString();
+            await priceCheckChannel.send(new Discord.MessageEmbed(embed));
+        }, config.priceInterval || 60000);
+    }
 });
 
 client.on('error', console.error);
