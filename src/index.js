@@ -590,50 +590,6 @@ client.login(config.token).then(async () => {
   } catch (err) {
     console.error(err)
   }
-  const priceCheckChannel =
-    config.priceChannelId &&
-    (await client.channels.fetch(config.priceChannelId).catch(console.error))
-  if (priceCheckChannel) {
-    setInterval(async () => {
-      const [coinGecko, ...exchanges] = await Promise.all([
-        await prices.coinGecko(),
-        ...Object.keys(prices.exchanges).map((x) =>
-          promiseTimeout(
-            prices.exchanges[x](),
-            config.exchangeApiTimeout || 2500,
-          )
-            .catch((err) => console.log('Exchange API error: ' + err))
-            .then((price) => [x, price]),
-        ),
-      ])
-      const embed = {}
-      embed.description =
-        `**${coinGecko.btc} BTC - $${coinGecko.usd} USD**\n` +
-        `Market cap: $${coinGecko.market_cap} USD (#${coinGecko.cap_rank})\n` +
-        `24h volume: $${coinGecko.volume} USD\n1 BTC = $${coinGecko.btcusd} USD`
-      if (coinGecko.percent_change_1h < 0) {
-        embed.color = 0xed2939 // imperial red
-      } else if (coinGecko.percent_change_1h > 0) {
-        embed.color = 0x39ff14 // neon green
-      }
-      embed.description += '\n```\n'
-      const nameFieldLength = Math.max(...exchanges.map((x) => x[0].length)) + 1
-      for (let [name, price] of exchanges) {
-        const nameSpacing = ' '.repeat(nameFieldLength - name.length)
-        if (price) {
-          embed.description += `${name}:${nameSpacing}${price} BTC\n`
-        } else {
-          embed.description += `${name}:${nameSpacing}API error\n`
-        }
-      }
-      embed.description += '```'
-      embed.footer = {
-        text: 'Pulled from CoinGecko and the listed exchanges',
-      }
-      embed.timestamp = new Date().toISOString()
-      await priceCheckChannel.send(new Discord.MessageEmbed(embed))
-    }, config.priceInterval || 60000)
-  }
 })
 
 client.on('error', console.error)

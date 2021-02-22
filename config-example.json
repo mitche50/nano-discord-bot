@@ -1,0 +1,15 @@
+{
+  "token": "",
+  "guildId": "",
+  "testing": false,
+  "modRoles": [],
+  "noPingingRoles": [],
+  "sinBinRole": "",
+  "rulesChannelId": "",
+  "ownerId": "",
+  "modConfiguredRoles": [],
+  "copycatAlertRoleId": "",
+  "copycatTargetRoleId": "",
+  "nameChangeChannelId": "",
+  "priceChannelId": ""
+}
